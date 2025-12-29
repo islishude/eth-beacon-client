@@ -3,7 +3,6 @@ package beacon
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 
@@ -32,7 +31,6 @@ func (c *Client) GetBlobs(ctx context.Context, blockID string, versionedHashes .
 		}
 	}
 
-	fmt.Println(query.Encode())
 	body, err := c.doRequest(ctx, http.MethodGet, "/eth/v1/beacon/blobs/"+blockID, query)
 	if err != nil {
 		return nil, err
