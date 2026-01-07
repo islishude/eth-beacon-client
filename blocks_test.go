@@ -5,60 +5,220 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/protolambda/zrnt/eth2/beacon/altair"
+	"github.com/protolambda/zrnt/eth2/beacon/bellatrix"
+	"github.com/protolambda/zrnt/eth2/beacon/capella"
+	"github.com/protolambda/zrnt/eth2/beacon/deneb"
 	"github.com/protolambda/zrnt/eth2/beacon/electra"
+	"github.com/protolambda/zrnt/eth2/beacon/phase0"
 )
 
-func TestGetBlock_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/eth/v2/beacon/blocks/head" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Method != http.MethodGet {
-			t.Errorf("unexpected method: %s", r.Method)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Eth-Consensus-Version", "deneb")
-		w.WriteHeader(http.StatusOK)
-		data,err := os.ReadFile("testdata/fulu.block.json")
-		if err != nil {
-			t.Fatalf("failed to read test data: %v", err)
-		}
-		_, _ = w.Write(data)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL)
-	resp, err := client.GetBlock(context.Background(), "head")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestGetBlock_ByVersion(t *testing.T) {
+	tests := []struct {
+		name         string
+		blockID      string
+		testdataFile string
+		wantVersion  ConsensusVersion
+		wantSlot     uint64
+		wantProposer uint64
+		extraCheck   func(t *testing.T, block any)
+	}{
+		{
+			name:         "fulu",
+			blockID:      "head",
+			testdataFile: "testdata/fulu.block.json",
+			wantVersion:  ConsensusVersionFulu,
+			wantSlot:     13410020,
+			wantProposer: 1797581,
+			extraCheck: func(t *testing.T, block any) {
+				if _, ok := block.(*electra.BeaconBlock); !ok {
+					t.Errorf("expected *electra.BeaconBlock, got %T", block)
+				}
+			},
+		},
+		{
+			name:         "electra",
+			blockID:      "11982020",
+			testdataFile: "testdata/electra.block.json",
+			wantVersion:  ConsensusVersionElectra,
+			wantSlot:     11982020,
+			wantProposer: 1605697,
+			extraCheck: func(t *testing.T, block any) {
+				if _, ok := block.(*electra.BeaconBlock); !ok {
+					t.Errorf("expected *electra.BeaconBlock, got %T", block)
+				}
+			},
+		},
+		{
+			name:         "deneb",
+			blockID:      "11511320",
+			testdataFile: "testdata/deneb.block.json",
+			wantVersion:  ConsensusVersionDeneb,
+			wantSlot:     11511320,
+			wantProposer: 1667419,
+			extraCheck: func(t *testing.T, block any) {
+				denebBlock, ok := block.(*deneb.BeaconBlock)
+				if !ok {
+					t.Errorf("expected *deneb.BeaconBlock, got %T", block)
+					return
+				}
+				if len(denebBlock.Body.BlobKZGCommitments) != 5 {
+					t.Errorf("BlobKZGCommitments length is not 5")
+				}
+			},
+		},
+		{
+			name:         "capella",
+			blockID:      "11511320",
+			testdataFile: "testdata/cepella.block.json",
+			wantVersion:  ConsensusVersionCapella,
+			wantSlot:     0, // skip slot check
+			wantProposer: 0, // skip proposer check
+			extraCheck: func(t *testing.T, block any) {
+				if _, ok := block.(*capella.BeaconBlock); !ok {
+					t.Errorf("expected *capella.BeaconBlock, got %T", block)
+				}
+			},
+		},
+		{
+			name:         "bellatrix",
+			blockID:      "6155220",
+			testdataFile: "testdata/bellatrix.block.json",
+			wantVersion:  ConsensusVersionBellatrix,
+			wantSlot:     6155220,
+			wantProposer: 218470,
+			extraCheck: func(t *testing.T, block any) {
+				if _, ok := block.(*bellatrix.BeaconBlock); !ok {
+					t.Errorf("expected *bellatrix.BeaconBlock, got %T", block)
+				}
+			},
+		},
+		{
+			name:         "altair",
+			blockID:      "3199220",
+			testdataFile: "testdata/altair.block.json",
+			wantVersion:  ConsensusVersionAltair,
+			wantSlot:     3199220,
+			wantProposer: 66269,
+			extraCheck: func(t *testing.T, block any) {
+				if _, ok := block.(altair.BeaconBlock); !ok {
+					t.Errorf("expected altair.BeaconBlock, got %T", block)
+				}
+			},
+		},
+		{
+			name:         "phase0",
+			blockID:      "1511320",
+			testdataFile: "testdata/phase0.block.json",
+			wantVersion:  ConsensusVersionPhase0,
+			wantSlot:     1511320,
+			wantProposer: 145572,
+			extraCheck: func(t *testing.T, block any) {
+				if _, ok := block.(*phase0.BeaconBlock); !ok {
+					t.Errorf("expected *phase0.BeaconBlock, got %T", block)
+				}
+			},
+		},
 	}
 
-	if resp.Version != ConsensusVersionFulu {
-		t.Errorf("expected version fulu, got %s", resp.Version)
-	}
-	if resp.ExecutionOptimistic {
-		t.Error("expected execution_optimistic false")
-	}
-	if !resp.Finalized {
-		t.Error("expected finalized true")
-	}
-	block,err := resp.ParseBlock()
-	if err != nil {
-		t.Fatalf("unexpected error parsing block: %v", err)
-	}
-	fuluBlock, ok := block.(*electra.BeaconBlock)
-	if !ok {
-		t.Fatalf("expected fulu.BeaconBlock, got %T", block)
-	}
-	if fuluBlock.Slot != 13410020 {
-		t.Errorf("expected slot 13410020, got %d", fuluBlock.Slot)
-	}
-	if fuluBlock.ProposerIndex != 1797581 {
-		t.Errorf("expected proposer_index 1797581, got %d", fuluBlock.ProposerIndex)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				expectedPath := "/eth/v2/beacon/blocks/" + tt.blockID
+				if r.URL.Path != expectedPath {
+					t.Errorf("unexpected path: got %s, want %s", r.URL.Path, expectedPath)
+				}
+				if r.Method != http.MethodGet {
+					t.Errorf("unexpected method: %s", r.Method)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				data, err := os.ReadFile(tt.testdataFile)
+				if err != nil {
+					t.Fatalf("failed to read test data: %v", err)
+				}
+				_, _ = w.Write(data)
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			resp, err := client.GetBlock(context.Background(), tt.blockID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if resp.Version != tt.wantVersion {
+				t.Errorf("version: got %s, want %s", resp.Version, tt.wantVersion)
+			}
+			if resp.ExecutionOptimistic {
+				t.Error("expected execution_optimistic false")
+			}
+			if !resp.Finalized {
+				t.Error("expected finalized true")
+			}
+
+			block, err := resp.ParseBlock()
+			if err != nil {
+				t.Fatalf("unexpected error parsing block: %v", err)
+			}
+
+			// Check slot and proposer if specified
+			if tt.wantSlot != 0 || tt.wantProposer != 0 {
+				switch b := block.(type) {
+				case *phase0.BeaconBlock:
+					if tt.wantSlot != 0 && uint64(b.Slot) != tt.wantSlot {
+						t.Errorf("slot: got %d, want %d", b.Slot, tt.wantSlot)
+					}
+					if tt.wantProposer != 0 && uint64(b.ProposerIndex) != tt.wantProposer {
+						t.Errorf("proposer_index: got %d, want %d", b.ProposerIndex, tt.wantProposer)
+					}
+				case altair.BeaconBlock:
+					if tt.wantSlot != 0 && uint64(b.Slot) != tt.wantSlot {
+						t.Errorf("slot: got %d, want %d", b.Slot, tt.wantSlot)
+					}
+					if tt.wantProposer != 0 && uint64(b.ProposerIndex) != tt.wantProposer {
+						t.Errorf("proposer_index: got %d, want %d", b.ProposerIndex, tt.wantProposer)
+					}
+				case *bellatrix.BeaconBlock:
+					if tt.wantSlot != 0 && uint64(b.Slot) != tt.wantSlot {
+						t.Errorf("slot: got %d, want %d", b.Slot, tt.wantSlot)
+					}
+					if tt.wantProposer != 0 && uint64(b.ProposerIndex) != tt.wantProposer {
+						t.Errorf("proposer_index: got %d, want %d", b.ProposerIndex, tt.wantProposer)
+					}
+				case *capella.BeaconBlock:
+					if tt.wantSlot != 0 && uint64(b.Slot) != tt.wantSlot {
+						t.Errorf("slot: got %d, want %d", b.Slot, tt.wantSlot)
+					}
+					if tt.wantProposer != 0 && uint64(b.ProposerIndex) != tt.wantProposer {
+						t.Errorf("proposer_index: got %d, want %d", b.ProposerIndex, tt.wantProposer)
+					}
+				case *deneb.BeaconBlock:
+					if tt.wantSlot != 0 && uint64(b.Slot) != tt.wantSlot {
+						t.Errorf("slot: got %d, want %d", b.Slot, tt.wantSlot)
+					}
+					if tt.wantProposer != 0 && uint64(b.ProposerIndex) != tt.wantProposer {
+						t.Errorf("proposer_index: got %d, want %d", b.ProposerIndex, tt.wantProposer)
+					}
+				case *electra.BeaconBlock:
+					if tt.wantSlot != 0 && uint64(b.Slot) != tt.wantSlot {
+						t.Errorf("slot: got %d, want %d", b.Slot, tt.wantSlot)
+					}
+					if tt.wantProposer != 0 && uint64(b.ProposerIndex) != tt.wantProposer {
+						t.Errorf("proposer_index: got %d, want %d", b.ProposerIndex, tt.wantProposer)
+					}
+				}
+			}
+
+			if tt.extraCheck != nil {
+				tt.extraCheck(t, block)
+			}
+		})
 	}
 }
 
@@ -297,5 +457,43 @@ func TestConsensusVersions(t *testing.T) {
 		if string(tt.version) != tt.want {
 			t.Errorf("ConsensusVersion %s != %s", tt.version, tt.want)
 		}
+	}
+}
+
+func TestParseBlock_Error(t *testing.T) {
+	tests := []struct {
+		name      string
+		block     *BlockResponse
+		wantError string
+	}{
+		{
+			name:      "nil block response",
+			block:     nil,
+			wantError: "block response is nil",
+		},
+		{
+			name: "unsupported version",
+			block: &BlockResponse{
+				Version: "unknown_version",
+				Data:    SignedBeaconBlock{Message: []byte(`{}`)},
+			},
+			wantError: "unsupported consensus version: unknown_version",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.block.ParseBlock()
+			if tt.wantError == "" {
+				// Skip error check for cases where we just want to ensure it doesn't panic
+				return
+			}
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantError) {
+				t.Errorf("error %q does not contain %q", err.Error(), tt.wantError)
+			}
+		})
 	}
 }

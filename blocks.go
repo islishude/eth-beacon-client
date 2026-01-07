@@ -68,7 +68,7 @@ type AttestationData struct {
 // SignedBeaconBlock represents a signed beacon block
 type SignedBeaconBlock struct {
 	Message   json.RawMessage `json:"message"`
-	Signature string      `json:"signature"`
+	Signature string          `json:"signature"`
 }
 
 // BlockResponse represents the response from /eth/v2/beacon/blocks/{block_id}
@@ -85,6 +85,10 @@ type BlockResponse struct {
 
 // ParseBlock parses the block data into the appropriate beacon block structure based on the version
 func (block *BlockResponse) ParseBlock() (any, error) {
+	if block == nil {
+		return nil, fmt.Errorf("block response is nil")
+	}
+
 	switch block.Version {
 	case ConsensusVersionPhase0:
 		var body phase0.BeaconBlock
@@ -116,7 +120,7 @@ func (block *BlockResponse) ParseBlock() (any, error) {
 			return nil, err
 		}
 		return &body, nil
-	case ConsensusVersionElectra,ConsensusVersionFulu:
+	case ConsensusVersionElectra, ConsensusVersionFulu:
 		var body electra.BeaconBlock
 		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
 			return nil, err
