@@ -3,9 +3,16 @@ package beacon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/protolambda/zrnt/eth2/beacon/altair"
+	"github.com/protolambda/zrnt/eth2/beacon/bellatrix"
+	"github.com/protolambda/zrnt/eth2/beacon/capella"
+	"github.com/protolambda/zrnt/eth2/beacon/deneb"
+	"github.com/protolambda/zrnt/eth2/beacon/electra"
+	"github.com/protolambda/zrnt/eth2/beacon/phase0"
 )
 
 // ConsensusVersion represents the consensus version/fork name
@@ -58,18 +65,9 @@ type AttestationData struct {
 	Target          Checkpoint  `json:"target"`
 }
 
-// BeaconBlock represents the common fields of a beacon block message
-type BeaconBlock struct {
-	Slot          uint64          `json:"slot,string"`
-	ProposerIndex uint64          `json:"proposer_index,string"`
-	ParentRoot    common.Hash     `json:"parent_root"`
-	StateRoot     common.Hash     `json:"state_root"`
-	Body          json.RawMessage `json:"body"`
-}
-
 // SignedBeaconBlock represents a signed beacon block
 type SignedBeaconBlock struct {
-	Message   BeaconBlock `json:"message"`
+	Message   json.RawMessage `json:"message"`
 	Signature string      `json:"signature"`
 }
 
@@ -83,6 +81,49 @@ type BlockResponse struct {
 	Finalized bool `json:"finalized"`
 	// Data contains the signed beacon block (structure varies by version)
 	Data SignedBeaconBlock `json:"data"`
+}
+
+func (block *BlockResponse) ParseBlock() (any, error) {
+	switch block.Version {
+	case ConsensusVersionPhase0:
+		var body phase0.BeaconBlock
+		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
+			return nil, err
+		}
+		return &body, nil
+	case ConsensusVersionAltair:
+		var body altair.BeaconBlock
+		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
+			return nil, err
+		}
+		return body, nil
+	case ConsensusVersionBellatrix:
+		var body bellatrix.BeaconBlock
+		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
+			return nil, err
+		}
+		return &body, nil
+	case ConsensusVersionCapella:
+		var body capella.BeaconBlock
+		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
+			return nil, err
+		}
+		return &body, nil
+	case ConsensusVersionDeneb:
+		var body deneb.BeaconBlock
+		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
+			return nil, err
+		}
+		return &body, nil
+	case ConsensusVersionElectra,ConsensusVersionFulu:
+		var body electra.BeaconBlock
+		if err := json.Unmarshal(block.Data.Message, &body); err != nil {
+			return nil, err
+		}
+		return &body, nil
+	default:
+		return nil, fmt.Errorf("unsupported consensus version: %s", block.Version)
+	}
 }
 
 // GetBlock retrieves block details for a given block id

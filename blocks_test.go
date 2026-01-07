@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/protolambda/zrnt/eth2/beacon/electra"
 )
 
 func TestGetBlock_Success(t *testing.T) {
@@ -21,29 +23,11 @@ func TestGetBlock_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Eth-Consensus-Version", "deneb")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{
-			"version": "deneb",
-			"execution_optimistic": false,
-			"finalized": true,
-			"data": {
-				"message": {
-					"slot": "12345",
-					"proposer_index": "100",
-					"parent_root": "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2",
-					"state_root": "0xaabbccdd9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2",
-					"body": {
-						"randao_reveal": "0x1234",
-						"eth1_data": {
-							"deposit_root": "0x0000000000000000000000000000000000000000000000000000000000000000",
-							"deposit_count": "100",
-							"block_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
-						},
-						"graffiti": "0x0000000000000000000000000000000000000000000000000000000000000000"
-					}
-				},
-				"signature": "0x1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505cc411d61252fb6cb3fa0017b679f8bb2305b26a285fa2737f175668d0dff91cc1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505"
-			}
-		}`))
+		data,err := os.ReadFile("testdata/fulu.block.json")
+		if err != nil {
+			t.Fatalf("failed to read test data: %v", err)
+		}
+		_, _ = w.Write(data)
 	}))
 	defer server.Close()
 
@@ -53,8 +37,8 @@ func TestGetBlock_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if resp.Version != ConsensusVersionDeneb {
-		t.Errorf("expected version deneb, got %s", resp.Version)
+	if resp.Version != ConsensusVersionFulu {
+		t.Errorf("expected version fulu, got %s", resp.Version)
 	}
 	if resp.ExecutionOptimistic {
 		t.Error("expected execution_optimistic false")
@@ -62,15 +46,19 @@ func TestGetBlock_Success(t *testing.T) {
 	if !resp.Finalized {
 		t.Error("expected finalized true")
 	}
-	if resp.Data.Message.Slot != 12345 {
-		t.Errorf("expected slot 12345, got %d", resp.Data.Message.Slot)
+	block,err := resp.ParseBlock()
+	if err != nil {
+		t.Fatalf("unexpected error parsing block: %v", err)
 	}
-	if resp.Data.Message.ProposerIndex != 100 {
-		t.Errorf("expected proposer_index 100, got %d", resp.Data.Message.ProposerIndex)
+	fuluBlock, ok := block.(*electra.BeaconBlock)
+	if !ok {
+		t.Fatalf("expected fulu.BeaconBlock, got %T", block)
 	}
-	expectedParentRoot := common.HexToHash("0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2")
-	if resp.Data.Message.ParentRoot != expectedParentRoot {
-		t.Errorf("unexpected parent_root: %s", resp.Data.Message.ParentRoot.Hex())
+	if fuluBlock.Slot != 13410020 {
+		t.Errorf("expected slot 13410020, got %d", fuluBlock.Slot)
+	}
+	if fuluBlock.ProposerIndex != 1797581 {
+		t.Errorf("expected proposer_index 1797581, got %d", fuluBlock.ProposerIndex)
 	}
 }
 

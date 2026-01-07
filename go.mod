@@ -15,8 +15,8 @@ require (
 	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/kilic/bls12-381 v0.1.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
-	github.com/minio/sha256-simd v1.0.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
+	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/protolambda/bls12-381-util v0.1.0 // indirect
 	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
 	golang.org/x/crypto v0.36.0 // indirect
