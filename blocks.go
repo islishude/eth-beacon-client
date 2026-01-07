@@ -83,6 +83,7 @@ type BlockResponse struct {
 	Data SignedBeaconBlock `json:"data"`
 }
 
+// ParseBlock parses the block data into the appropriate beacon block structure based on the version
 func (block *BlockResponse) ParseBlock() (any, error) {
 	switch block.Version {
 	case ConsensusVersionPhase0:
