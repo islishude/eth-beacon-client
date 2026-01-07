@@ -1,4 +1,4 @@
-package beacon
+package beaconclient
 
 // GENESIS_SLOT is the first slot of the beacon chain
 const GENESIS_SLOT uint64 = 0
